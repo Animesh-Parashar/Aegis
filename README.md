@@ -1,173 +1,247 @@
-# 🛡️ Aegis — Safe Autonomous Payments for AI Agents (EIP-7702)
+# 🛡️ Aegis - Pre-Execution Enforcement for Autonomous AI Agents  
+### Safe Delegated Payments via EIP-7702
 
-> **Delegate spending authority once.
-> Let agents pay autonomously — safely.**
+> **Delegate authority once.  
+> Enforce limits forever.  
+> Let agents act — without risking total loss.**
 
-Aegis is a **delegated execution policy** built on **EIP-7702** that allows users to safely authorize autonomous agents to make on-chain micropayments (e.g. x402 flows) **without giving them private keys or unlimited access to funds**.
+Aegis is a **pre-execution enforcement layer** for autonomous AI agents, built using **EIP-7702 delegation**.  
+It allows users to authorize agents to make on-chain payments (e.g. x402 flows) **without sharing private keys and without granting unbounded authority**.
 
+Aegis enforces *what an agent is allowed to do* **before execution**, deterministically, on-chain.
 
 ---
 
 ## 🚨 The Problem
 
-AI agents are starting to:
+AI agents increasingly:
+- pay for APIs, compute, and services
+- run recurring subscriptions
+- perform x402 micropayments autonomously
 
-* pay for APIs, compute, and services
-* run subscriptions
-* make x402 micropayments autonomously
+Today, autonomy usually requires:
+- handing an agent a private key ❌
+- trusting off-chain middleware ❌
+- inserting human approvals (breaks autonomy) ❌
 
-Today, this usually means:
+This creates a binary choice:
+> **Full control or full risk**
 
-* giving the agent a private key ❌
-* trusting off-chain middleware ❌
-* adding human approvals (kills autonomy) ❌
-
-There is **no native way to bound an agent’s spending authority**.
+There is no native, on-chain primitive for **bounded delegation of economic authority**.
 
 ---
 
-## ✅ The Idea (Simple)
+## ✅ The Core Idea
 
-**Separate intent from authority.**
+### Separate **decision-making** from **execution authority**.
 
-* Agents decide *when* to pay
-* Aegis enforces *how much* they are allowed to pay
+- Agents decide *when* to act
+- Aegis enforces *what is allowed to execute*
 
-All enforcement happens **on-chain**, before execution.
+All enforcement happens **on-chain, before state transition**.
+
+This is not monitoring.  
+This is not reputation.  
+This is **hard execution control**.
 
 ---
 
 ## 🧠 Architecture Overview
 
 ```
-┌──────────────┐
-│   User EOA   │
-│ (keeps keys) │
-└──────┬───────┘
-       │  EIP-7702 delegation (one-time)
-       ▼
-┌──────────────────────┐
-│  AegisDelegation     │
-│  (on-chain policy)   │
-│  • spend limits      │
-│  • cooldowns         │
-│  • agent allowlist   │
-│  • kill switch       │
-└──────┬───────────────┘
-       │
-       ▼
-┌──────────────────────┐
-│  USDC / Target       │
-│  Contracts           │
-└──────────────────────┘
+       ┌──────────────────────────┐
+       │      User EOA Asset      │
+       │    (Private Key Safe)    │
+       └────────────┬─────────────┘
+                    │
+          [ Signature / EIP-7702 ]
+          "Points to Aegis Logic"
+                    │
+                    ▼
+       ┌──────────────────────────┐
+       │   AegisDelegation Smart  │
+       │    Implementation Logic  │
+       ├──────────────────────────┤
+       │  ENFORCEMENT POLICIES:   │
+       │                          │
+       │ • Spend Limits (Daily)   │
+       │ • Cooldown / Timelocks   │
+       │ • Agent Role-Based Access│
+       │ • Asset/Token Allowlist  │
+       │ • Recovery / Kill-Switch │
+       └────────────┬─────────────┘
+                    │
+            [ Validated Call ]
+                    │
+                    ▼
+       ┌──────────────────────────┐
+       │     Target Protocols     │
+       │   (USDC / DEX / x402)    │
+       └──────────────────────────┘
 ```
 
-**Key point:**
-After delegation, agents can transact **autonomously**, but **cannot exceed on-chain limits**.
+**Key property:**  
+After delegation, agents operate autonomously, **but cannot exceed on-chain policy constraints**.
 
----
 
-## 🔁 Execution Flow (End-to-End)
+
+## 🔁 End-to-End Execution Flow
 
 ```
-1. User deploys AegisDelegation
-2. User signs one EIP-7702 delegation
-3. Agent runs autonomously
-4. Agent hits an API → gets HTTP 402
-5. Agent constructs USDC.transfer calldata
-6. Transaction executes via AegisDelegation
-7. Aegis enforces policy:
-   - amount <= daily limit
-   - cooldown respected
-   - agent allowed
-8. Payment succeeds or reverts deterministically
+
+(1) User deploys AegisDelegation
+(2) User signs an EIP-7702 delegation (one-time)
+(3) Agent operates autonomously
+(4) Agent encounters HTTP 402 (x402 payment request)
+(5) Agent constructs calldata (e.g. USDC.transfer)
+(6) Call is routed via AegisDelegation
+(7) Aegis enforces policy:
+- amount ≤ limit
+- cooldown respected
+- agent authorized
+- token allowed
+- kill-switch inactive
+(8) Transaction:
+→ executes successfully
+→ or reverts deterministically
+
 ```
 
-No human signing per transaction.
-No middleware censorship.
-No private keys shared.
+No per-tx human signing.  
+No off-chain trust.  
+No silent failure modes.
 
 ---
 
 ## 🔐 What Aegis Enforces (On-Chain)
 
-* ✅ Daily spending limits
-* ✅ Cooldowns between spends
-* ✅ Agent allowlist
-* ✅ Token allowlist (USDC-only)
-* ✅ Irreversible kill switch
+- ✅ Daily / rolling spend limits
+- ✅ Cooldown intervals
+- ✅ Agent allowlisting
+- ✅ Token allowlisting (e.g. USDC-only)
+- ✅ Irreversible kill switch
 
-If an agent loops, hallucinates, or is compromised:
+Failure modes are explicit and bounded.
 
-* worst case = **bounded loss**
-* never full wallet drain
+If an agent:
+- loops
+- hallucinates
+- is compromised
+
+**Worst case = capped loss.  
+Never total wallet drain.**
 
 ---
 
-## 🤝 x402 Compatibility
+## 🔗 x402 Compatibility
 
 Aegis is **orthogonal** to x402.
 
-* x402 handles **payment negotiation**
-* Aegis handles **execution authority**
+- x402 → *payment negotiation*
+- Aegis → *execution authority*
 
 No changes to x402 are required.
+Aegis simply enforces whether payment may execute.
 
 ---
 
-## 🧱 Contracts
+## 🧱 Contract Structure
 
 ### `AegisDelegation.sol` (Core)
 
-* Delegated execution policy
-* Enforces all safety rules
-* Remix-ready
-* No external dependencies
+- EIP-7702 compatible delegation target
+- Stateless enforcement logic
+- Deterministic reverts
+- No external dependencies
 
 ### `AegisDelegationFactory.sol` (Optional)
 
-* Deploys delegation contracts
-* Improves UX for demos
+- UX helper for deploying delegations
+- Not required for correctness
 
 ---
 
 ## 🧪 Testnet Demo Scope
 
-* AegisDelegation deployed on testnet
-* EIP-7702 delegation from an EOA
-* An autonomous agent script
-* ✅ One successful payment
-* ❌ One rejected payment (limit / cooldown)
-* 🛑 Kill switch halting execution
+- AegisDelegation deployed on testnet
+- EIP-7702 delegation from EOA
+- Autonomous agent script
+- ✅ One successful payment
+- ❌ One reverted payment (limit / cooldown)
+- 🛑 Kill switch halting all execution
 
-No frontend required — focus is on **execution correctness**.
+No frontend required — focus is **execution correctness**.
 
 ---
 
-## ❌ What This Is NOT
+## ❌ What Aegis Is Not
 
-* Not a transaction firewall
-* Not AI prompt monitoring
-* Not reputation scoring
-* Not off-chain trust enforcement
+- ❌ Not a reputation system
+- ❌ Not agent scoring
+- ❌ Not post-execution attribution
+- ❌ Not off-chain middleware
+- ❌ Not prompt monitoring
 
-Aegis enforces **authority**, not behavior.
+Aegis enforces **authority**, not intent or behavior.
+
+---
+
+## 🧩 Position in the Agent Trust Stack
+
+```
+       ┌──────────────────────────────┐
+       │     REPUTATION & AUDIT       │
+       │  (Post-Execution Trust)      │
+       ├──────────────────────────────┤
+       │ • ERC-8004 Attestations      │
+       │ • DKG / Threshold Logging    │
+       │ • Success/Failure Metrics    │
+       └──────────────▲───────────────┘
+                      │
+              [ On-Chain Proof ]
+                      │
+       ┌──────────────────────────────┐
+       │     AEGIS ENFORCEMENT        │
+       │  (Execution Guardrails)      │
+       ├──────────────────────────────┤
+       │ • EIP-7702 Delegation        │
+       │ • Real-time Policy Checks    │
+       │ • Asset Isolation (x402)     │
+       └──────────────▲───────────────┘
+                      │
+              [ Restricted Call ]
+                      │
+       ┌──────────────────────────────┐
+       │    AGENT DECISION LAYER      │
+       │  (Intelligence & Intent)     │
+       ├──────────────────────────────┤
+       │ • LLM Reasoning (RAG)        │
+       │ • Tool / Function Calling    │
+       │ • Signed Intent Generation   │
+       └──────────────────────────────┘
+
+```
+
+Aegis handles **ex-ante safety**.  
+Reputation systems handle **ex-post accountability**.
+
+Both are necessary. Neither replaces the other.
 
 ---
 
 ## 🏆 Why This Matters
 
 Aegis enables:
+- safe autonomous subscriptions
+- agent-driven micropayments
+- non-custodial AI marketplaces
+- x402 adoption without catastrophic risk
 
-* safe autonomous subscriptions
-* agent-driven payroll & micropayments
-* AI marketplaces without custodial risk
-* x402 adoption without fear of wallet drain
-
-It’s a **missing primitive** for agent economies.
+It introduces a **missing primitive**:
+> **Bounded, revocable economic authority for autonomous agents**
 
 ---
 
-> **Aegis lets users safely delegate autonomous payments by enforcing spending authority on-chain, without breaking x402 autonomy or giving agents private keys.**
+> **Aegis lets users delegate autonomous payments safely by enforcing execution authority on-chain — without breaking autonomy and without exposing private keys.**
 
 ---
